@@ -1,110 +1,84 @@
 ﻿"""
-SCOUT AGENT: The discovery engine of ACA.
-Purpose: Hunts for job opportunities via RSS feeds and targeted URL guessing on platforms like Greenhouse and Lever.
+SCOUT AGENT (ELITE): The Multi-Niche Discovery Engine.
+Now specifically tuned for AI, Healthcare, FinTech, and Cybersecurity.
 """
 
 import json
 import os
 import requests
 from datetime import datetime
-import database # Import the local database controller
-import xml.etree.ElementTree as ET # Used for parsing XML RSS feeds
-from playwright.sync_api import sync_playwright # For deep-scanning via browser
+import database
+import xml.etree.ElementTree as ET
+from playwright.sync_api import sync_playwright
 
-def search_jobs(role="Internship", domain="Software", location="Remote", job_type="Internship", deep_scan=False):
-    """
-    Core search function to find new job leads.
-    """
-    found_count = 0 # Counter for new, unique jobs found
-    today = datetime.now().strftime("%Y-%m-%d") # Format date for record-keeping
+def search_jobs(role="Internship", domain="AI", location="Remote", job_type="Internship"):
+    found_count = 0
+    today = datetime.now().strftime("%Y-%m-%d")
     
-    # --- TIER 1: RSS FEEDS (High Reliability & Minimal Cost) ---
-    # We use RSS feeds from known job boards to get structured data instantly.
+    # --- 1. THE NICHE KEYWORD ENGINE ---
+    # We now pull from your specific strengths
+    niches = ["AI", "Healthcare", "FinTech", "Cybersecurity", "Full Stack"]
+    search_queries = [f"{role} {n}" for n in niches]
+    
+    # --- 2. EXPANDED RSS FEED LIST ---
     feeds = [
         "https://weworkremotely.com/categories/remote-programming-jobs.rss",
-        "https://remotive.com/api/remote-jobs/feed"
+        "https://hnrss.org/jobs",
+        "https://remoteok.com/remote-jobs.rss",
+        "https://www.workingnomads.com/jobs/feed"
     ]
 
     for feed_url in feeds:
         try:
-            # Request the XML content from the feed provider
             response = requests.get(feed_url, timeout=10)
             if response.status_code == 200:
-                # Parse the XML structure
                 root = ET.fromstring(response.content)
                 for item in root.findall('.//item'):
                     title = item.find('title').text
-                    # Check if the job matches our role OR domain OR job_type
-                    search_matches = [role.lower(), domain.lower(), job_type.lower()]
-                    if any(term in title.lower() for term in search_matches):
-                        # Construct a standardized job dictionary
+                    # Match any of your niches or the search role
+                    if any(term.lower() in title.lower() for term in (search_queries + [domain])):
                         job = {
                             "title": title,
                             "url": item.find('link').text,
-                            "source": "RSS_Feed",
-                            "status": "pending_review", 
-                            "date_found": today,
-                            "job_type": job_type # Store metadata for UI coloring
-                        }
-                        # database.add_job returns True if it's a new, unique URL
-                        if database.add_job(job):
-                            found_count += 1
-        except Exception as e:
-            print(f"RSS Feed Error ({feed_url}): {e}")
-            continue
-
-    # --- TIER 2: URL GUESSING (Direct-to-Source) ---
-    # Many companies use Greenhouse/Lever. We "guess" their board URL to find jobs before they hit job boards.
-    companies = ["stripe", "airbnb", "uber", "datadog", "dropbox", "asana", "figma", "github", "zoom", "spotify", "slack", "discord"]
-    for company in companies:
-        for platform in ["boards.greenhouse.io", "jobs.lever.co"]:
-            url = f"https://{platform}/{company}"
-            # Construct job object for the whole board
-            job = {
-                "title": f"{company.capitalize()} Board", 
-                "url": url, 
-                "source": "Guesser", 
-                "status": "pending_review", 
-                "date_found": today,
-                "job_type": job_type # Tag with current search intent
-            }
-            if database.add_job(job):
-                found_count += 1
-
-    # --- TIER 3: DEEP SCAN (Google Dorking via Browser) ---
-    # If deep_scan is enabled, we use a real browser to search Google for direct career links.
-    if deep_scan:
-        try:
-            with sync_playwright() as p:
-                # Launch a hidden browser
-                browser = p.chromium.launch(headless=True)
-                page = browser.new_page()
-                # Construct a Google "Dork" query to find application pages specifically
-                query = f"{role} {domain} {job_type} {location} site:greenhouse.io OR site:lever.co"
-                page.goto(f"https://www.google.com/search?q={query}")
-                
-                # Extract all anchor tags (links) from the search results
-                links = page.query_selector_all('a')
-                for link in links:
-                    href = link.get_attribute('href')
-                    # If the link points to a known career platform, we log it
-                    if href and ("greenhouse.io" in href or "lever.co" in href):
-                        job = {
-                            "title": f"{domain} {job_type} Role", 
-                            "url": href, 
-                            "source": "DeepScan", 
+                            "source": f"RSS_{feed_url.split('/')[2]}",
                             "status": "pending_review", 
                             "date_found": today,
                             "job_type": job_type
                         }
-                        if database.add_job(job): 
-                            found_count += 1
-                browser.close()
-        except Exception as e:
-            print(f"DeepScan Error: {e}")
+                        if database.add_job(job): found_count += 1
+        except: continue
 
-    return found_count # Return total new leads discovered
+    # --- 3. THE "ELITE 100" COMPANY BOARD CHECK ---
+    # Adding heavy hitters in FinTech and Healthcare
+    companies = [
+        # FINTECH
+        "plaid", "brex", "ramp", "stripe", "robinhood", "coinbase", "affirm", "chime", "revolut", "wise", "klarna", "marqeta",
+        # HEALTHCARE
+        "oscar", "cloverhealth", "flatiron", "zocdoc", "headspace", "ro", "hims", "omada", "tempus", "teladoc", "modernhealth",
+        # AI & CORE TECH
+        "openai", "anthropic", "tesla", "spacex", "palantir", "figma", "github", "vercel", "notion", "databricks", "snowflake"
+    ]
+    
+    for company in companies:
+        for platform in ["boards.greenhouse.io", "jobs.lever.co"]:
+            url = f"https://{platform}/{company}"
+            job = {"title": f"{company.capitalize()} Board", "url": url, "source": "Elite_Guesser", "status": "pending_review", "date_found": today, "job_type": job_type}
+            if database.add_job(job): found_count += 1
 
-if __name__ == "__main__":
-    # Test execution when run directly
-    print(f"Found {search_jobs()} new jobs.")
+    # --- 4. ADVANCED DEEP SCAN (The "Nishant" Special) ---
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page()
+            for q in search_queries:
+                page.goto(f"https://www.google.com/search?q={q} site:greenhouse.io OR site:lever.co after:2026-03-01")
+                links = page.query_selector_all('a')
+                for link in links:
+                    href = link.get_attribute('href')
+                    if href and ("greenhouse.io" in href or "lever.co" in href):
+                        job = {"title": f"{q} Role", "url": href, "source": "Niche_DeepScan", "status": "pending_review", "date_found": today, "job_type": job_type}
+                        if database.add_job(job): found_count += 1
+            browser.close()
+    except: pass
+
+    return found_count

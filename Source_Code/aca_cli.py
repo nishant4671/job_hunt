@@ -1,9 +1,9 @@
 ﻿"""
 ACA-CLI: The High-Speed "Factory" version of your Job-Hunt app.
-Purpose: Handles massive batches of jobs from the terminal for maximum speed.
+Enhanced Version: Now supports interactive review and custom search filters.
 """
 
-import argparse # Library to handle terminal commands (like --scout)
+import argparse # Library to handle terminal commands
 import scout_agent # Our job hunter
 import asset_factory # Our AI brain
 import database # Our local memory
@@ -11,61 +11,96 @@ import form_filler # Our browser automation
 import os
 
 def main():
-    # 1. Setup the "Command Menu" for the terminal
+    # 1. Setup the "Command Menu"
     parser = argparse.ArgumentParser(description="ACA High-Speed Terminal Agent")
     parser.add_argument("--scout", action="store_true", help="Find new jobs")
-    parser.add_argument("--tailor", action="store_true", help="AI-read JDs and write letters for all pending jobs")
-    parser.add_argument("--apply", action="store_true", help="Launch the semi-auto browser for ready jobs")
-    parser.add_argument("--limit", type=int, default=10, help="How many jobs to handle at once")
+    parser.add_argument("--review", action="store_true", help="Interactively review found jobs")
+    parser.add_argument("--tailor", action="store_true", help="AI-read JDs and write letters")
+    parser.add_argument("--apply", action="store_true", help="Launch semi-auto browser")
     
-    args = parser.parse_args() # This reads what you typed in the terminal
+    # 2. Add Search Preference Arguments (Can be passed via terminal)
+    parser.add_argument("--role", type=str, default="Internship", help="Target role (e.g. Intern, Engineer)")
+    parser.add_argument("--domain", type=str, default="AI", help="Tech stack (e.g. AI, Backend)")
+    parser.add_argument("--type", type=str, default="Internship", help="Full-Time, Part-Time, Internship")
+    parser.add_argument("--loc", type=str, default="Remote", help="Job location")
+    parser.add_argument("--limit", type=int, default=10, help="Batch limit")
+    
+    args = parser.parse_args()
 
-    # --- PHASE 1: THE SCOUT ---
+    # --- PHASE 1: THE SCOUT (Hunting with your Preferences) ---
     if args.scout:
-        print(f"[?] Scouting for new leads...")
-        # Calls our hunter script to find fresh links
-        count = scout_agent.search_jobs(role="Internship", domain="AI", job_type="Internship")
-        print(f"[!] Success: Found {count} new jobs and added them to database.json")
+        print(f"\n[?] Scouting for: {args.role} | {args.domain} | {args.type} | {args.loc}")
+        # Now uses the variables you passed in the command!
+        count = scout_agent.search_jobs(
+            role=args.role, 
+            domain=args.domain, 
+            location=args.loc, 
+            job_type=args.type
+        )
+        print(f"[!] Success: Found {count} new leads! Run --review to see them.")
 
-    # --- PHASE 2: THE FACTORY (The Boring Part) ---
-    if args.tailor:
-        print(f"[?] Starting Batch Tailoring...")
+    # --- PHASE 1.5: THE REVIEW (Look at what the Robot found) ---
+    if args.review:
         db = database.load_db()
-        # Find jobs that haven't been worked on yet
-        pending = [j for j in db['jobs'] if j.get('status') == 'pending_review'][:args.limit]
+        pending = [j for j in db['jobs'] if j.get('status') == 'pending_review']
         
-        factory = asset_factory.AssetFactory(persona="Technical")
-        for job in pending:
-            print(f" -> Reading JD and Writing for: {job['title']}")
-            # The AI reads the site, maps your projects, and writes the .txt and .pdf
-            factory.generate_tailored_assets(job['title'], job['url'], job.get('source', 'Company'))
-            # Update status so we don't do it twice
-            database.update_job_status(job['url'], 'form_ready')
-        print(f"[!] Done: {len(pending)} sets of assets are ready in your Applications folder.")
+        if not pending:
+            print("[!] No new jobs to review. Run --scout first!")
+            return
 
-    # --- PHASE 3: THE EXECUTOR (The Semi-Auto Part) ---
-    if args.apply:
-        print(f"[?] Starting Semi-Auto Application Loop...")
+        print(f"\n--- INTERACTIVE REVIEW ({len(pending)} jobs) ---")
+        for job in pending:
+            print(f"\n[JOB]: {job['title']} @ {job.get('source', 'Unknown')}")
+            print(f"[URL]: {job['url']}")
+            
+            # Ask the human what to do
+            choice = input("Action -> [A]pprove, [I]gnore, [S]kip, [Q]uit: ").lower()
+            
+            if choice == 'a':
+                database.update_job_status(job['url'], 'approved')
+                print(" [+] Approved for tailoring!")
+            elif choice == 'i':
+                database.update_job_status(job['url'], 'ignored')
+                print(" [-] Ignored.")
+            elif choice == 'q':
+                break
+            else:
+                print(" [ ] Skipped for now.")
+
+    # --- PHASE 2: THE FACTORY (Tailoring Only Approved Jobs) ---
+    if args.tailor:
         db = database.load_db()
-        # Find jobs where the AI has finished its work
+        # Only work on jobs YOU approved in the --review phase
+        approved = [j for j in db['jobs'] if j.get('status') == 'approved'][:args.limit]
+        
+        if not approved:
+            print("[!] No approved jobs ready. Run --review first!")
+            return
+
+        print(f"\n[?] Tailoring {len(approved)} jobs...")
+        factory = asset_factory.AssetFactory(persona="Technical")
+        for job in approved:
+            print(f" -> Processing: {job['title']}")
+            factory.generate_tailored_assets(job['title'], job['url'], job.get('source', 'Company'))
+            database.update_job_status(job['url'], 'form_ready')
+        print("[!] All assets ready!")
+
+    # --- PHASE 3: THE EXECUTOR (Applying) ---
+    if args.apply:
+        db = database.load_db()
         ready = [j for j in db['jobs'] if j.get('status') == 'form_ready'][:args.limit]
         
-        # User info for the forms
         user_info = {'full_name': 'Nishant', 'email': 'NISHANTHKR4671@gmail.com', 'phone': '+91 8468002278'}
         resume_path = r"C:\Users\HP\OneDrive\Desktop\Job_Hunt\Master_Assets\resume.pdf"
 
         for job in ready:
-            print(f"\n[!] OPENING BROWSER FOR: {job['title']}")
-            print(f"[!] Link: {job['url']}")
-            # Path to the AI-written letter
+            print(f"\n[!] APPLYING: {job['title']}")
             folder = f"{job.get('source', 'Company')}_{job['title']}".replace(' ', '_').replace('/', '_')
             cl_path = os.path.join(r"C:\Users\HP\OneDrive\Desktop\Job_Hunt\Applications", folder, "Cover_Letter.txt")
             
-            # This opens the browser, types your info, and WAITS for you.
             form_filler.fill_form(job['url'], user_info, resume_path, cl_path)
-            # Once you close the browser, we mark it as applied
             database.update_job_status(job['url'], 'applied')
-            print(f"[+] Finished with {job['title']}. Moving to next...")
+            print(f"[+] Done with {job['title']}.")
 
 if __name__ == "__main__":
     main()

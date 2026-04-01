@@ -58,3 +58,14 @@ def get_jobs_by_status(status):
     """
     db = load_db()
     return [j for j in db['jobs'] if j.get('status') == status]
+
+def update_job_status(url, new_status):
+    """
+    Helper function to update a job's status directly in database.json.
+    Inputs: Job URL (unique ID) and the new status string.
+    """
+    db = load_db()
+    for job in db['jobs']:
+        if job['url'] == url:
+            job['status'] = new_status
+    save_db(db)

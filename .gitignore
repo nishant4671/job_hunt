@@ -1,0 +1,21 @@
+# API Keys and Secrets
+.env
+Source_Code/.env
+
+# Personal Assets
+Master_Assets/
+Applications/
+*.pdf
+*.jpg
+*.png
+
+# Local Databases and Logs
+Source_Code/database.json
+Applications_Log.csv
+Logs/
+__pycache__/
+*.pyc
+
+# OS files
+.DS_Store
+Thumbs.db

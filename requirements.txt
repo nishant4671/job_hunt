@@ -1,0 +1,9 @@
+google-generativeai
+playwright
+streamlit
+pypdf
+fpdf
+gspread
+pandas
+python-dotenv
+duckduckgo_search
